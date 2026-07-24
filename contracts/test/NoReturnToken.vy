@@ -1,13 +1,10 @@
 #pragma version 0.4.3
 #pragma evm-version prague
-from ethereum.ercs import IERC20
 
-implements: IERC20
-
-
-interface VestingEscrow:
-    def revoker() -> address: view
-
+"""
+@title No-return ERC-20 test token
+@notice Exercises compatibility with tokens that omit transfer return data
+"""
 
 event Transfer:
     sender: indexed(address)
@@ -24,43 +21,28 @@ event Approval:
 balanceOf: public(HashMap[address, uint256])
 allowance: public(HashMap[address, HashMap[address, uint256]])
 totalSupply: public(uint256)
-watched_escrow: public(address)
-observed_revoker: public(address)
-extra_debit: public(uint256)
-transfer_mode: public(uint256)
 
 
 @external
-def transfer(receiver: address, amount: uint256) -> bool:
-    if self.transfer_mode == 1:
-        return False
-    assert self.transfer_mode != 2
-
-    if msg.sender == self.watched_escrow:
-        self.observed_revoker = staticcall VestingEscrow(msg.sender).revoker()
-
-    debit: uint256 = amount + self.extra_debit
-    self.balanceOf[msg.sender] -= debit
+def transfer(receiver: address, amount: uint256):
+    self.balanceOf[msg.sender] -= amount
     self.balanceOf[receiver] += amount
     log Transfer(sender=msg.sender, receiver=receiver, value=amount)
-    return True
 
 
 @external
-def transferFrom(owner: address, receiver: address, amount: uint256) -> bool:
+def transferFrom(owner: address, receiver: address, amount: uint256):
     self.balanceOf[owner] -= amount
     self.balanceOf[receiver] += amount
     self.allowance[owner][msg.sender] -= amount
     log Transfer(sender=owner, receiver=receiver, value=amount)
     log Approval(owner=owner, spender=msg.sender, value=self.allowance[owner][msg.sender])
-    return True
 
 
 @external
-def approve(spender: address, amount: uint256) -> bool:
+def approve(spender: address, amount: uint256):
     self.allowance[msg.sender][spender] = amount
     log Approval(owner=msg.sender, spender=spender, value=amount)
-    return True
 
 
 @external
@@ -69,15 +51,3 @@ def mint(receiver: address, amount: uint256):
     self.totalSupply += amount
     self.balanceOf[receiver] += amount
     log Transfer(sender=empty(address), receiver=receiver, value=amount)
-
-
-@external
-def configure(watched_escrow: address, extra_debit: uint256):
-    self.watched_escrow = watched_escrow
-    self.extra_debit = extra_debit
-
-
-@external
-def set_transfer_mode(transfer_mode: uint256):
-    assert transfer_mode <= 2
-    self.transfer_mode = transfer_mode

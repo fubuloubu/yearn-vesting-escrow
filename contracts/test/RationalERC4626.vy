@@ -1,12 +1,14 @@
 #pragma version 0.4.3
 #pragma evm-version prague
+
+"""
+@title Rational-rate ERC-4626 test token
+@notice Models asset/share unit ratios without assuming a 1e18 scale
+"""
+
 from ethereum.ercs import IERC20
 
 implements: IERC20
-
-
-interface VestingEscrow:
-    def revoker() -> address: view
 
 
 event Transfer:
@@ -21,26 +23,45 @@ event Approval:
     value: uint256
 
 
+asset: public(address)
+asset_units: public(uint256)
+share_units: public(uint256)
 balanceOf: public(HashMap[address, uint256])
 allowance: public(HashMap[address, HashMap[address, uint256]])
 totalSupply: public(uint256)
-watched_escrow: public(address)
-observed_revoker: public(address)
-extra_debit: public(uint256)
-transfer_mode: public(uint256)
+
+
+@deploy
+def __init__(asset: address, asset_units: uint256, share_units: uint256):
+    assert asset != empty(address)
+    assert asset_units > 0 and share_units > 0
+    self.asset = asset
+    self.asset_units = asset_units
+    self.share_units = share_units
+
+
+@external
+@view
+def convertToAssets(shares: uint256) -> uint256:
+    return shares * self.asset_units // self.share_units
+
+
+@external
+@view
+def convertToShares(assets: uint256) -> uint256:
+    return assets * self.share_units // self.asset_units
+
+
+@external
+def set_ratio(asset_units: uint256, share_units: uint256):
+    assert asset_units > 0 and share_units > 0
+    self.asset_units = asset_units
+    self.share_units = share_units
 
 
 @external
 def transfer(receiver: address, amount: uint256) -> bool:
-    if self.transfer_mode == 1:
-        return False
-    assert self.transfer_mode != 2
-
-    if msg.sender == self.watched_escrow:
-        self.observed_revoker = staticcall VestingEscrow(msg.sender).revoker()
-
-    debit: uint256 = amount + self.extra_debit
-    self.balanceOf[msg.sender] -= debit
+    self.balanceOf[msg.sender] -= amount
     self.balanceOf[receiver] += amount
     log Transfer(sender=msg.sender, receiver=receiver, value=amount)
     return True
@@ -69,15 +90,3 @@ def mint(receiver: address, amount: uint256):
     self.totalSupply += amount
     self.balanceOf[receiver] += amount
     log Transfer(sender=empty(address), receiver=receiver, value=amount)
-
-
-@external
-def configure(watched_escrow: address, extra_debit: uint256):
-    self.watched_escrow = watched_escrow
-    self.extra_debit = extra_debit
-
-
-@external
-def set_transfer_mode(transfer_mode: uint256):
-    assert transfer_mode <= 2
-    self.transfer_mode = transfer_mode
