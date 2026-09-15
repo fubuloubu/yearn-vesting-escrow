@@ -38,6 +38,9 @@ jobs:
       - name: Run property tests
         run: uv run --locked pytest tests/integration/
 
+      - name: Verify frozen release sources and bytecode
+        run: uv run --locked pytest tests/test_release_manifest.py
+
       - name: Build package
         run: uv build
 
